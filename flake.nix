@@ -16,7 +16,7 @@
           pname = "sandbox-mcp";
           version = "0.1.0";
           src = ./.;
-          vendorHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; # Will need to be updated
+          vendorHash = null; # Will need to be updated when building with Nix: use `nix build` and update with actual hash
           
           ldflags = [
             "-X github.com/pottekkat/sandbox-mcp/internal/version.Version=${self.rev or "dev"}"

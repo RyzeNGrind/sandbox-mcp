@@ -156,6 +156,12 @@ func (n *NixSandboxExecutor) simulateNixExecution(ctx context.Context, nixExprPa
 		if strings.HasSuffix(file.Name(), ".js") {
 			return n.executeJavaScriptFile(ctx, inputDir, file.Name())
 		}
+		if strings.HasSuffix(file.Name(), ".rs") {
+			return n.executeRustFile(ctx, inputDir, file.Name())
+		}
+		if strings.HasSuffix(file.Name(), ".java") {
+			return n.executeJavaFile(ctx, inputDir, file.Name())
+		}
 	}
 
 	return "No executable files found", nil
@@ -208,6 +214,42 @@ func (n *NixSandboxExecutor) executeJavaScriptFile(ctx context.Context, dir, fil
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("JavaScript execution failed: %v", err)
+	}
+	
+	return string(output), nil
+}
+
+// executeRustFile runs a Rust file
+func (n *NixSandboxExecutor) executeRustFile(ctx context.Context, dir, filename string) (string, error) {
+	// First compile the Rust file
+	baseName := strings.TrimSuffix(filename, ".rs")
+	compileCmd := exec.CommandContext(ctx, "rustc", "-o", baseName, filename)
+	compileCmd.Dir = dir
+	
+	if output, err := compileCmd.CombinedOutput(); err != nil {
+		return string(output), fmt.Errorf("Rust compilation failed: %v", err)
+	}
+	
+	// Then run the compiled binary
+	runCmd := exec.CommandContext(ctx, filepath.Join(dir, baseName))
+	runCmd.Dir = dir
+	
+	output, err := runCmd.CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("Rust execution failed: %v", err)
+	}
+	
+	return string(output), nil
+}
+
+// executeJavaFile runs a Java file
+func (n *NixSandboxExecutor) executeJavaFile(ctx context.Context, dir, filename string) (string, error) {
+	cmd := exec.CommandContext(ctx, "java", "--enable-preview", filename)
+	cmd.Dir = dir
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("Java execution failed: %v", err)
 	}
 	
 	return string(output), nil
