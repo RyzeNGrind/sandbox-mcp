@@ -1,4 +1,4 @@
-.PHONY: build clean deps images test
+.PHONY: build clean deps nix-build test
 
 # Install dependencies
 deps:
@@ -21,13 +21,23 @@ install:
 clean:
 	rm -rf dist/sandbox-mcp
 
-# Build sandbox images
+# Build with Nix (replaces Docker-based images)
+nix-build:
+	@echo "Building with Nix flake..."
+	@if command -v nix >/dev/null 2>&1; then \
+		nix build; \
+	else \
+		echo "Nix not found. Using standard Go build as fallback."; \
+		$(MAKE) build; \
+	fi
+
+# Generate Nix expressions for sandbox environments (replaces Docker images)
+nix-expressions:
+	@echo "Nix expressions are already available in the nix/ directory"
+	@echo "Available sandbox environments:"
+	@ls -1 nix/*.nix | sed 's/nix\///g' | sed 's/\.nix//g' | sed 's/^/  - /'
+
+# Legacy Docker images target (deprecated - use nix-expressions instead)
 images:
-	docker build --file sandboxes/shell/Dockerfile --tag sandbox-mcp/shell:latest sandboxes/shell/
-	docker build --file sandboxes/go/Dockerfile --tag sandbox-mcp/go:latest sandboxes/go/
-	docker build --file sandboxes/python/Dockerfile --tag sandbox-mcp/python:latest sandboxes/python/
-	docker build --file sandboxes/javascript/Dockerfile --tag sandbox-mcp/javascript:latest sandboxes/javascript/
-	docker build --file sandboxes/network-tools/Dockerfile --tag sandbox-mcp/network-tools:latest sandboxes/network-tools/
-	docker build --file sandboxes/apisix/Dockerfile --tag sandbox-mcp/apisix:latest sandboxes/apisix/
-	docker build --file sandboxes/rust/Dockerfile --tag sandbox-mcp/rust:latest sandboxes/rust/
-	docker build --file sandboxes/java/Dockerfile --tag sandbox-mcp/java:latest sandboxes/java/
+	@echo "WARNING: Docker-based images are deprecated. Use 'make nix-expressions' instead."
+	@echo "Nix-native sandboxing provides better isolation and reproducibility."

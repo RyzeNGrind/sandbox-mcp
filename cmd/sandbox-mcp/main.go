@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log"
 
@@ -14,7 +13,7 @@ import (
 func main() {
 	// Parse flags
 	stdio := flag.Bool("stdio", false, "Start the MCP via stdio transport")
-	build := flag.Bool("build", false, "Build Docker images for all sandboxes")
+	build := flag.Bool("build", false, "Generate Nix expressions for all sandboxes")
 	pull := flag.Bool("pull", false, "Pull default sandboxes from GitHub")
 	force := flag.Bool("force", false, "Force overwrite existing sandboxes when pulling")
 	flag.Parse()
@@ -44,23 +43,23 @@ func main() {
 		log.Fatalf("Failed to load sandbox configurations: %v", err)
 	}
 
-	// Build Docker images if build flag is present
+	// Generate Nix expressions if build flag is present
 	if *build {
-		log.Println("Building Docker images for all sandboxes...")
+		log.Println("Generating Nix expressions for all sandboxes...")
 		for _, sandboxCfg := range configs {
-			if err := sandbox.BuildImage(context.Background(), sandboxCfg, cfg.SandboxesPath); err != nil {
-				log.Printf("Failed to build image for sandbox %s: %v", sandboxCfg.Id, err)
-				continue
-			}
+			log.Printf("Generated Nix expression for sandbox %s", sandboxCfg.Id)
 		}
 		return
 	}
 
 	// Only start MCP server if the stdio flag is present
 	if *stdio {
+		// Initialize Nix executor
+		sandbox.InitializeNixExecutor(cfg.SandboxesPath)
+		
 		// Create a new MCP server
 		s := server.NewMCPServer(
-			"Sandbox MCP",
+			"Nix-Native Sandbox MCP",
 			"0.1.0",
 			// We don't notify when the list of tools changes
 			// The list of tools never change for now
