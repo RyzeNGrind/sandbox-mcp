@@ -4,9 +4,13 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    mcp-servers-nix = {
+      url = "github:natsukium/mcp-servers-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, mcp-servers-nix }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -22,87 +26,41 @@
             "-X github.com/pottekkat/sandbox-mcp/internal/version.Version=${self.rev or "dev"}"
             "-X github.com/pottekkat/sandbox-mcp/internal/version.CommitSHA=${self.shortRev or "unknown"}"
           ];
-        };
 
-        # Sandbox environments using Nix instead of Docker
-        sandboxEnvironments = {
-          shell = pkgs.buildEnv {
-            name = "sandbox-shell";
-            paths = with pkgs; [ 
-              bash 
-              coreutils 
-              findutils 
-              grep 
-              sed 
-              awk 
-            ];
-          };
-          
-          go = pkgs.buildEnv {
-            name = "sandbox-go";
-            paths = with pkgs; [ 
-              go 
-              git 
-              coreutils 
-              bash 
-            ];
-          };
-          
-          python = pkgs.buildEnv {
-            name = "sandbox-python";
-            paths = with pkgs; [ 
-              python3 
-              python3Packages.pip 
-              coreutils 
-              bash 
-            ];
-          };
-          
-          javascript = pkgs.buildEnv {
-            name = "sandbox-javascript";
-            paths = with pkgs; [ 
-              nodejs 
-              nodePackages.npm 
-              coreutils 
-              bash 
-            ];
-          };
-          
-          rust = pkgs.buildEnv {
-            name = "sandbox-rust";
-            paths = with pkgs; [ 
-              rustc 
-              cargo 
-              gcc 
-              coreutils 
-              bash 
-            ];
-          };
-          
-          java = pkgs.buildEnv {
-            name = "sandbox-java";
-            paths = with pkgs; [ 
-              openjdk 
-              coreutils 
-              bash 
-            ];
+          meta = with pkgs.lib; {
+            description = "MCP server for executing code in isolated sandbox environments";
+            homepage = "https://github.com/RyzeNGrind/sandbox-mcp";
+            license = licenses.mit;
+            maintainers = [ ];
+            mainProgram = "sandbox-mcp";
           };
         };
 
-        # Helper function to create a sandboxed execution environment
-        mkSandboxRunner = { environment, command, workdir ? "/sandbox" }: pkgs.writeShellScript "sandbox-runner" ''
-          export PATH="${environment}/bin:$PATH"
-          export HOME="${workdir}"
-          cd "${workdir}"
-          exec ${builtins.concatStringsSep " " command}
-        '';
+        # Configuration for sandbox-mcp using mcp-servers-nix framework
+        sandbox-mcp-config = mcp-servers-nix.lib.mkConfig pkgs {
+          programs = {
+            # Configure our custom sandbox-mcp server
+            sandbox-mcp = {
+              enable = true;
+              package = sandbox-mcp;
+              args = [
+                "--config"
+                "/etc/sandbox-mcp/config.json"
+              ];
+              env = {
+                NIX_PATH = "nixpkgs=${nixpkgs}";
+              };
+            };
+          };
+        };
 
       in
       {
         packages = {
           default = sandbox-mcp;
           sandbox-mcp = sandbox-mcp;
-        } // sandboxEnvironments;
+          config = sandbox-mcp-config;
+        };
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
@@ -120,12 +78,114 @@
             echo "  go build ./cmd/sandbox-mcp     - Build the application"
             echo "  nix build                      - Build with Nix"
             echo "  nix develop                    - Enter development shell"
+            echo "  nix build .#config             - Build MCP configuration"
           '';
         };
 
         apps.default = flake-utils.lib.mkApp {
           drv = sandbox-mcp;
         };
+
+        # NixOS module for sandbox-mcp
+        nixosModules.default = { config, lib, pkgs, ... }:
+          let
+            cfg = config.services.sandbox-mcp;
+          in
+          {
+            options.services.sandbox-mcp = {
+              enable = lib.mkEnableOption "sandbox-mcp MCP server";
+              
+              package = lib.mkPackageOption pkgs "sandbox-mcp" { };
+              
+              configFile = lib.mkOption {
+                type = lib.types.path;
+                description = "Path to the sandbox-mcp configuration file";
+              };
+              
+              user = lib.mkOption {
+                type = lib.types.str;
+                default = "sandbox-mcp";
+                description = "User account under which sandbox-mcp runs";
+              };
+              
+              group = lib.mkOption {
+                type = lib.types.str;
+                default = "sandbox-mcp";
+                description = "Group under which sandbox-mcp runs";
+              };
+            };
+
+            config = lib.mkIf cfg.enable {
+              users.users.${cfg.user} = {
+                isSystemUser = true;
+                group = cfg.group;
+                description = "sandbox-mcp service user";
+              };
+
+              users.groups.${cfg.group} = { };
+
+              systemd.services.sandbox-mcp = {
+                description = "sandbox-mcp MCP server";
+                wantedBy = [ "multi-user.target" ];
+                after = [ "network.target" ];
+                
+                serviceConfig = {
+                  Type = "simple";
+                  User = cfg.user;
+                  Group = cfg.group;
+                  ExecStart = "${cfg.package}/bin/sandbox-mcp --config ${cfg.configFile}";
+                  Restart = "on-failure";
+                  RestartSec = 5;
+                  
+                  # Security hardening
+                  NoNewPrivileges = true;
+                  PrivateTmp = true;
+                  ProtectHome = true;
+                  ProtectSystem = "strict";
+                  ReadWritePaths = [ "/tmp" "/var/lib/sandbox-mcp" ];
+                };
+                
+                environment = {
+                  NIX_PATH = "nixpkgs=${nixpkgs}";
+                };
+              };
+            };
+          };
+
+        # Home Manager module for sandbox-mcp  
+        homeManagerModules.default = { config, lib, pkgs, ... }:
+          let
+            cfg = config.programs.sandbox-mcp;
+          in
+          {
+            options.programs.sandbox-mcp = {
+              enable = lib.mkEnableOption "sandbox-mcp MCP server integration";
+              
+              package = lib.mkPackageOption pkgs "sandbox-mcp" { };
+              
+              settings = lib.mkOption {
+                type = lib.types.attrs;
+                default = { };
+                description = "Configuration for sandbox-mcp";
+              };
+            };
+
+            config = lib.mkIf cfg.enable {
+              home.packages = [ cfg.package ];
+              
+              xdg.configFile."claude/claude_desktop_config.json".text = builtins.toJSON {
+                mcpServers.sandbox-mcp = {
+                  command = "${cfg.package}/bin/sandbox-mcp";
+                  args = [ "--config" "${config.xdg.configHome}/sandbox-mcp/config.json" ];
+                  env = {
+                    NIX_PATH = "nixpkgs=${nixpkgs}";
+                  };
+                };
+              };
+              
+              xdg.configFile."sandbox-mcp/config.json".text = builtins.toJSON cfg.settings;
+            };
+          };
       }
     );
 }

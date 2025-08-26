@@ -5,13 +5,13 @@
 ![GitHub commits since latest release](https://img.shields.io/github/commits-since/pottekkat/sandbox-mcp/latest)
 ![GitHub License](https://img.shields.io/github/license/pottekkat/sandbox-mcp)
 
-**Sandbox MCP** is a Model Context Protocol (MCP) server that enables LLMs (MCP hosts/clients) to **run code in secure, isolated Docker containers**.
+**Sandbox MCP** is a Model Context Protocol (MCP) server that enables LLMs (MCP hosts/clients) to **run code in secure, isolated Nix sandbox environments**.
 
 While LLMs are really good at generating code, most **can't run the code they generate**. You end up running this untested code directly on your machine, which could have drastic unintended consequences.
 
 Giving LLMs the tools to test the code safely prevents such issues and helps you **generate more accurate code in fewer iterations**.
 
-Sandbox MCP gives the LLMs an **easy-to-use execution environment that anyone can create and configure** through a simple, AI-native MCP server that runs locally.
+Sandbox MCP gives the LLMs an **easy-to-use execution environment that anyone can create and configure** through a simple, AI-native MCP server that runs locally using **Nix-native sandboxing** for superior isolation and reproducibility.
 
 _Inspired by [Codapi](https://codapi.org). Some sandboxes are the same as [Codapi sandboxes](https://github.com/nalgeon/sandboxes)._
 
@@ -35,6 +35,67 @@ This demo shows how Sandbox MCP works with Claude Desktop.
 Try the [video](demo.mp4) if the GIF isn't clear.
 
 ## Installation
+
+### Via Nix (Recommended)
+
+#### Using the natsukium/mcp-servers-nix Framework
+
+Sandbox MCP integrates with the [natsukium/mcp-servers-nix](https://github.com/natsukium/mcp-servers-nix) framework for easy configuration and deployment:
+
+```nix
+# config.nix
+let
+  pkgs = import <nixpkgs> {};
+  mcp-servers = import (builtins.fetchTarball "https://github.com/natsukium/mcp-servers-nix/archive/main.tar.gz") { inherit pkgs; };
+in
+mcp-servers.lib.mkConfig pkgs {
+  programs = {
+    sandbox-mcp = {
+      enable = true;
+      sandboxTimeout = 120;
+      enabledSandboxes = [ "shell" "go" "python" "javascript" "rust" "java" ];
+    };
+  };
+}
+```
+
+Build and use:
+
+```bash
+nix-build config.nix
+cat result  # This is your Claude Desktop configuration
+```
+
+#### Using Flakes
+
+```nix
+# flake.nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    mcp-servers-nix.url = "github:natsukium/mcp-servers-nix";
+    sandbox-mcp.url = "github:RyzeNGrind/sandbox-mcp";
+  };
+
+  outputs = { nixpkgs, mcp-servers-nix, sandbox-mcp, ... }:
+    let
+      system = "x86_64-linux";
+      pkgs = import nixpkgs { inherit system; };
+    in
+    {
+      packages.${system}.default = mcp-servers-nix.lib.mkConfig pkgs {
+        programs = {
+          sandbox-mcp = {
+            enable = true;
+            package = sandbox-mcp.packages.${system}.default;
+          };
+        };
+      };
+    };
+}
+```
+
+For detailed Nix integration, see [NIX_FRAMEWORK_INTEGRATION.md](NIX_FRAMEWORK_INTEGRATION.md).
 
 ### Download Binary
 
@@ -62,26 +123,66 @@ See the [Development section](#development).
 
 ## Usage
 
-### Initilization
+### Nix-Native Mode (Recommended)
 
-Before you use `sandbox-mcp` with LLMs, you need to initialize its configuration:
+Sandbox MCP now uses Nix-native sandboxing by default, providing better isolation and reproducibility without requiring Docker:
 
 ```bash
-# Create the configuration directory in
-# $XDG_CONFIG_HOME/sandbox-mcp and pull
-# the default sandboxes from GitHub
+# Initialize with Nix support
+sandbox-mcp --init-nix
+
+# Run in Nix-native mode  
+sandbox-mcp --stdio --nix-native
+```
+
+Benefits of Nix-native mode:
+- **No Docker dependency** - Works on any system with or without Docker
+- **Faster execution** - No container startup overhead  
+- **Better isolation** - Native Linux namespaces provide container-level security
+- **Reproducible environments** - Nix ensures exact same environment every time
+
+### Legacy Docker Mode
+
+For backward compatibility, Docker mode is still supported:
+
+```bash
+# Initialize with Docker (legacy)
 sandbox-mcp --pull
 
-# Build the Docker images for the sandboxes
+# Build Docker images
 sandbox-mcp --build
+
+# Run in Docker mode
+sandbox-mcp --stdio
 ```
 
 > [!NOTE]
-> Make sure you have Docker installed and running.
+> Make sure you have Docker installed and running for legacy mode.
 
 ### With MCP Hosts/Clients
 
-Add this to your `claude_desktop_config.json` for Claude Desktop or `mcp.json` for Cursor IDE:
+#### For Nix-native Mode
+
+Add this to your `claude_desktop_config.json` for Claude Desktop:
+
+```json
+{
+    "mcpServers": {
+        "sandbox-mcp": {
+            "command": "path/to/sandbox-mcp",
+            "args": [
+                "--stdio",
+                "--nix-native"
+            ],
+            "env": {
+                "NIX_PATH": "nixpkgs=<nixpkgs>"
+            }
+        }
+    }
+}
+```
+
+#### For Docker Mode (Legacy)
 
 ```json
 {
