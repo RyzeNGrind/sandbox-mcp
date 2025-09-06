@@ -15,17 +15,42 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         
+        # Development shell hook script
+        devShellHook = pkgs.writeShellScript "dev-shell-hook" ''
+          echo "Nix-native sandbox-mcp development environment"
+          echo "Available commands:"
+          echo "  go build ./cmd/sandbox-mcp     - Build the application"
+          echo "  nix build                      - Build with Nix"
+          echo "  nix develop                    - Enter development shell"
+          echo "  nix build .#example-config     - Build example MCP configuration"
+        '';
+        
+        # Sandbox setup utilities
+        sandboxSetupScript = pkgs.writeShellScript "sandbox-setup" (builtins.readFile ./scripts/sandbox-setup.sh);
+        
+        # Build script
+        buildScript = pkgs.writeShellScript "build-sandbox-mcp" (builtins.readFile ./scripts/build.sh);
+        
         # Build the sandbox-mcp Go application
         sandbox-mcp = pkgs.buildGoModule {
           pname = "sandbox-mcp";
           version = "0.1.0";
           src = ./.;
-          vendorHash = null; # Will be calculated dynamically or set to null for local development
+          vendorHash = null; # Set to null for proper Go module handling with local development
+          
+          nativeBuildInputs = with pkgs; [ makeWrapper ];
           
           ldflags = [
+            "-s" "-w"
             "-X github.com/pottekkat/sandbox-mcp/internal/version.Version=${self.rev or "dev"}"
             "-X github.com/pottekkat/sandbox-mcp/internal/version.CommitSHA=${self.shortRev or "unknown"}"
           ];
+          
+          # Wrap binary to ensure Nix and other tools are available
+          postInstall = ''
+            wrapProgram $out/bin/sandbox-mcp \
+              --prefix PATH : ${pkgs.lib.makeBinPath (with pkgs; [ nix git ])}
+          '';
 
           meta = with pkgs.lib; {
             description = "MCP server for executing code in isolated sandbox environments";
@@ -33,6 +58,7 @@
             license = licenses.mit;
             maintainers = [ ];
             mainProgram = "sandbox-mcp";
+            platforms = platforms.unix;
           };
         };
 
@@ -69,6 +95,11 @@
           default = sandbox-mcp;
           sandbox-mcp = sandbox-mcp;
           example-config = example-mcp-config;
+          
+          # Utility scripts
+          setup-script = sandboxSetupScript;
+          dev-hook = devShellHook;
+          build-script = buildScript;
         };
 
         devShells.default = pkgs.mkShell {
@@ -81,14 +112,10 @@
             git
           ];
           
-          shellHook = ''
-            echo "Nix-native sandbox-mcp development environment"
-            echo "Available commands:"
-            echo "  go build ./cmd/sandbox-mcp     - Build the application"
-            echo "  nix build                      - Build with Nix"
-            echo "  nix develop                    - Enter development shell"
-            echo "  nix build .#example-config     - Build example MCP configuration"
-          '';
+          # Make scripts available in development shell
+          packages = [ sandboxSetupScript buildScript ];
+          
+          shellHook = "${devShellHook}";
         };
 
         apps.default = flake-utils.lib.mkApp {

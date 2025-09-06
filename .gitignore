@@ -2,6 +2,7 @@ dist/
 vendor/
 result
 result-*
+bin/
 
 .DS_Store
 
