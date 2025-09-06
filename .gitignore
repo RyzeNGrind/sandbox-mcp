@@ -1,3 +1,28 @@
 dist/
+vendor/
+result
+result-*
+bin/
 
 .DS_Store
+
+# Environment files (contain secrets)
+*.env
+!*.env.example
+
+# Nix build artifacts
+/result*
+
+# Temporary files
+/tmp/
+.tmp/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
