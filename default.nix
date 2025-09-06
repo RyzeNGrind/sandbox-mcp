@@ -13,7 +13,7 @@ buildGoModule rec {
 
   src = ./.;
 
-  vendorHash = null; # Update this when dependencies are added
+  vendorHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; # Update this when dependencies are added
 
   nativeBuildInputs = [ makeWrapper ];
 

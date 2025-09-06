@@ -20,7 +20,7 @@
           pname = "sandbox-mcp";
           version = "0.1.0";
           src = ./.;
-          vendorHash = null; # Will need to be updated when building with Nix: use `nix build` and update with actual hash
+          vendorHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; # Update this when building: use `nix build` and update with actual hash
           
           ldflags = [
             "-X github.com/pottekkat/sandbox-mcp/internal/version.Version=${self.rev or "dev"}"
@@ -36,13 +36,22 @@
           };
         };
 
-        # Configuration for sandbox-mcp using mcp-servers-nix framework
-        sandbox-mcp-config = mcp-servers-nix.lib.mkConfig pkgs {
+        # Example configuration showing how sandbox-mcp can be integrated
+        # with mcp-servers-nix framework via custom servers configuration
+        example-mcp-config = mcp-servers-nix.lib.mkConfig pkgs {
+          # Configure built-in framework modules
           programs = {
-            # Configure our custom sandbox-mcp server
-            sandbox-mcp = {
+            filesystem = {
               enable = true;
-              package = sandbox-mcp;
+              args = [ "/tmp/workspace" ];
+            };
+            fetch.enable = true;
+          };
+          
+          # Add our custom sandbox-mcp server
+          settings.servers = {
+            sandbox-mcp = {
+              command = "${sandbox-mcp}/bin/sandbox-mcp";
               args = [
                 "--config"
                 "/etc/sandbox-mcp/config.json"
@@ -59,7 +68,7 @@
         packages = {
           default = sandbox-mcp;
           sandbox-mcp = sandbox-mcp;
-          config = sandbox-mcp-config;
+          example-config = example-mcp-config;
         };
 
         devShells.default = pkgs.mkShell {
@@ -78,7 +87,7 @@
             echo "  go build ./cmd/sandbox-mcp     - Build the application"
             echo "  nix build                      - Build with Nix"
             echo "  nix develop                    - Enter development shell"
-            echo "  nix build .#config             - Build MCP configuration"
+            echo "  nix build .#example-config     - Build example MCP configuration"
           '';
         };
 
