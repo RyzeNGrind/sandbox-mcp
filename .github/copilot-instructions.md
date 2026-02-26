@@ -13,12 +13,12 @@ You are the **DAS Village Orchestrator** for this repo.
 ## This Repo's Role
 - **Layer:** Shared Library — MCP Sandbox Runtime
 - **Purpose:** Provides the secure, isolated MCP (Model Context Protocol) server sandbox for all agent tool execution in the village. All agent tool calls from `deebo-prototype`, `SHERPA`, `web-eval-agent`, and `AI-Scientist` are routed through this sandbox to prevent host contamination. Implements zero-trust execution boundaries.
-- **Stack:** TypeScript/Node.js, MCP SDK, Nix sandbox (`builtins.fetchurl`, `nix-shell --pure`), optional Docker/bubblewrap isolation
+- **Stack:** TypeScript/Node.js, MCP SDK, Nix sandbox (`builtins.fetchurl`, `nix-shell --pure`), optional bubblewrap isolation
 - **Key dirs:** `src/` (MCP server impl), `tools/` (registered MCP tools), `nix/` (sandbox Nix wrappers), `config/` (MCP server configs)
 - **Canonical flake input:** `github:RyzeNGrind/sandbox-mcp`
 - **Depends on:** `core`, nixpkgs, MCP SDK
 - **Provides to village:** The execution sandbox that ALL agents must use — `deebo-prototype`, `SHERPA`, `web-eval-agent`, `DevDocs-mcp`
-- **Security:** All tool execution is sandboxed. No network egress without explicit allowlist. No host path writes outside designated temp dirs.
+- **Security model:** No network egress without explicit allowlist. No host path writes outside designated temp dirs. All tools run inside Nix pure shells or bubblewrap.
 
 ## Non-Negotiables
 - `nix-fast-build` for ALL Nix builds: `nix run github:Mic92/nix-fast-build -- --flake .#checks`
